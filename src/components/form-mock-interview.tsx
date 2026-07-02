@@ -52,9 +52,44 @@ const formSchema = z.object({
     .min(1, "Minimum 1 question")
     .max(10, "Maximum 10 questions")
     .default(5),
+  resumeText: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
+
+// Dynamically load PDF.js from cdn
+const loadPdfJs = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js";
+    script.onload = () => {
+      const pdfjsLib = (window as any).pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+      resolve(pdfjsLib);
+    };
+    script.onerror = (err) => reject(err);
+    document.body.appendChild(script);
+  });
+};
+
+// Parse PDF files client-side
+const parsePdfFile = async (file: File): Promise<string> => {
+  const pdfjsLib = await loadPdfJs();
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map((item: any) => item.str).join(" ");
+    fullText += pageText + "\n";
+  }
+  return fullText;
+};
 
 export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
   const form = useForm<FormData>({
@@ -67,6 +102,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
           techStack: initialData.techStack,
           difficulty: (initialData.difficulty as "Easy" | "Moderate" | "Hard") || "Moderate",
           numQuestions: initialData.numQuestions || 5,
+          resumeText: initialData.resumeText || "",
         }
       : {
           position: "",
@@ -75,6 +111,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
           techStack: "",
           difficulty: "Moderate",
           numQuestions: 5,
+          resumeText: "",
         },
   });
 
@@ -118,23 +155,40 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
   };
 
   const generateAiResponse = async (data: FormData) => {
-    const prompt = `
-        As an experienced prompt engineer, generate a JSON array containing ${data?.numQuestions} technical interview questions along with detailed answers based on the following job information. Each object in the array should have the fields "question" and "answer", formatted as follows:
+    let resumeContext = "";
+    if (data.resumeText && data.resumeText.trim().length > 0) {
+      resumeContext = `
+        - Candidate Resume Details: 
+        """
+        ${data.resumeText}
+        """
+        The questions MUST be heavily tailored to the candidate's actual projects, specific tech stacks, and experiences found in their resume.
+      `;
+    }
 
+    const prompt = `
+        As an experienced technical interviewer and prompt engineer, generate a JSON array containing exactly ${data?.numQuestions} technical interview questions along with detailed answers.
+        
+        Job / Target Position Information:
+        - Job Position: ${data?.position}
+        - Job Description: ${data?.description}
+        - Years of Experience Required: ${data?.experience} years
+        - Tech Stacks: ${data?.techStack}
+        - Difficulty Level Selected: ${data?.difficulty}
+        ${resumeContext}
+
+        CRITICAL DIFFICULTY CALIBRATION RULES:
+        - If Difficulty Level is "Easy": The questions MUST be fundamental, basic, and introductory. Focus on core syntax, primary features, and basic rules of the technologies. DO NOT ask complex system design, deep optimization, or advanced architectural questions, even if the experience is high. Keep them accessible and basic.
+        - If Difficulty Level is "Moderate": The questions should be of intermediate difficulty. Focus on practical implementation, standard error handling, medium-complexity scenarios, and typical design choices.
+        - If Difficulty Level is "Hard": The questions must be advanced, challenging, and deep. Focus on system design, performance tuning, memory management, scale, security, and edge-case debugging.
+
+        Output Format:
+        Return the result strictly as a clean JSON array of objects without any surrounding markdown code blocks, labels, or extra text. Each object must have "question" and "answer" fields:
         [
           { "question": "<Question text>", "answer": "<Answer text>" },
           ...
         ]
-
-        Job Information:
-        - Job Position: ${data?.position}
-        - Job Description: ${data?.description}
-        - Years of Experience Required: ${data?.experience}
-        - Tech Stacks: ${data?.techStack}
-        - Difficulty Level: ${data?.difficulty}
-
-        The questions should be of ${data?.difficulty} difficulty level. They should assess skills in ${data?.techStack} development and best practices, problem-solving, and experience handling complex requirements. Please format the output strictly as an array of JSON objects without any additional labels, code blocks, or explanations. Return only the JSON array with questions and answers.
-        `;
+    `;
 
     try {
       // chatSession.sendMessage now returns string directly (already text response)
@@ -174,6 +228,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
 
           await updateDoc(doc(db, "interviews", initialData?.id), {
             questions: aiResult,
+            resumeText: data.resumeText || "",
             ...data,
             updatedAt: serverTimestamp(),
           }).catch((error) => console.log(error));
@@ -186,6 +241,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
 
           await addDoc(collection(db, "interviews"), {
             ...data,
+            resumeText: data.resumeText || "",
             userId,
             questions: aiResult,
             createdAt: serverTimestamp(),
@@ -215,6 +271,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
         techStack: initialData.techStack,
         difficulty: (initialData.difficulty as "Easy" | "Moderate" | "Hard") || "Moderate",
         numQuestions: initialData.numQuestions || 5,
+        resumeText: initialData.resumeText || "",
       });
     }
   }, [initialData, form]);
@@ -326,6 +383,74 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
                     className="h-12"
                     disabled={loading}
                     placeholder="eg:- React, Typescript..."
+                    {...field}
+                    value={field.value || ""}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          {/* Resume Upload Section */}
+          <div className="w-full space-y-4 border border-dashed border-gray-200 rounded-lg p-5 bg-gray-50/50">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-semibold text-gray-800">📄 Upload Resume (Optional)</span>
+              <p className="text-xs text-gray-500">Upload your PDF or TXT resume to customize mock interview questions strictly based on your work history and profile.</p>
+            </div>
+            <Input
+              type="file"
+              accept=".pdf,.txt"
+              disabled={loading}
+              className="h-12 cursor-pointer pt-2 bg-white"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+
+                setLoading(true);
+                const toastId = toast.loading("Uploading and parsing resume...");
+                try {
+                  let text = "";
+                  if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+                    text = await parsePdfFile(file);
+                  } else {
+                    text = await new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onload = (event) => resolve(event.target?.result as string || "");
+                      reader.onerror = (err) => reject(err);
+                      reader.readAsText(file);
+                    });
+                  }
+                  
+                  if (!text || text.trim().length === 0) {
+                    throw new Error("Could not extract any text from the file.");
+                  }
+
+                  form.setValue("resumeText", text, { shouldValidate: true, shouldDirty: true });
+                  toast.success("Resume parsed successfully! Questions will be tailored to your background.", { id: toastId });
+                } catch (err) {
+                  console.error(err);
+                  toast.error("Failed to parse resume. You can still paste details below manually.", { id: toastId });
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            />
+          </div>
+
+          <FormField
+            control={control}
+            name="resumeText"
+            render={({ field }) => (
+              <FormItem className="w-full space-y-4">
+                <div className="w-full flex items-center justify-between">
+                  <FormLabel>Paste Resume Details / Extracted Text (Optional)</FormLabel>
+                  <FormMessage className="text-sm" />
+                </div>
+                <FormControl>
+                  <Textarea
+                    className="min-h-[120px]"
+                    disabled={loading}
+                    placeholder="If you don't upload a PDF, copy-paste your resume summary or skills directly here..."
                     {...field}
                     value={field.value || ""}
                   />

@@ -37,6 +37,17 @@ export const ServicesPage = () => {
     }
   ];
 
+  const getServiceLink = (title: string) => {
+    switch (title) {
+      case "AI Mock Interviews": return "/generate?tab=interviews";
+      case "Technical Assessments": return "/generate?tab=assessments";
+      case "Career Coaching": return "/generate?tab=roadmap";
+      case "Resume Building": return "/generate?tab=resume";
+      case "Salary Negotiation": return "/generate?tab=negotiation";
+      default: return "/generate";
+    }
+  };
+
   return (
     <div className="flex-col w-full pb-24 bg-gray-50/50 min-h-screen">
       <Container className="py-20">
@@ -59,7 +70,7 @@ export const ServicesPage = () => {
               <p className="text-muted-foreground leading-relaxed mb-8">
                 {service.description}
               </p>
-              <Link to="/generate">
+              <Link to={getServiceLink(service.title)}>
                 <Button variant="outline" className="w-full rounded-xl hover:bg-slate-900 hover:text-white transition-colors py-6 font-semibold">
                   Get Started
                 </Button>

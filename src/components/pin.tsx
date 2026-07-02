@@ -76,7 +76,7 @@ export const InterviewPin = ({
 
         {/* Action Buttons */}
         {!onMockPage && (
-          <div className="flex items-center gap-2 shrink-0 w-full md:w-auto justify-end">
+          <div className="flex items-center gap-2 flex-wrap shrink-0 w-full md:w-auto justify-start sm:justify-end">
             <Button
               variant="outline"
               size="sm"

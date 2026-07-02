@@ -103,22 +103,29 @@ const SpeechRecorder: React.FC<SpeechRecorderProps> = ({
     }
   }, [isRecordingActive, isRecording, startSpeechToText, stopSpeechToText]);
 
+  const autoSubmitRef = useRef(onAutoSubmit);
+  useEffect(() => {
+    autoSubmitRef.current = onAutoSubmit;
+  }, [onAutoSubmit]);
+
   // Countdown timer logic
   useEffect(() => {
     if (!isRecording) return;
 
-    if (timeLeft <= 0) {
-      stopSpeechToText();
-      onAutoSubmit();
-      return;
-    }
-
     const timer = setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          stopSpeechToText();
+          autoSubmitRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, isRecording, stopSpeechToText, onAutoSubmit]);
+  }, [isRecording, stopSpeechToText]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -168,6 +175,8 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
   const { userId } = useAuth();
   const navigate = useNavigate();
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   // Face API custom hook
   const { isLoaded: isFaceApiLoaded } = useFaceApi();
 
@@ -178,6 +187,7 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
   const [boundaryWarning, setBoundaryWarning] = useState(false);
   const [warningsCount, setWarningsCount] = useState(0);
   const [currentEmotion, setCurrentEmotion] = useState("neutral");
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Emotion tallies
   const [emotionCounts, setEmotionCounts] = useState<Record<string, number>>({
@@ -241,6 +251,60 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
       window.speechSynthesis.cancel();
     };
   }, []);
+
+  // Listen for fullscreen change events
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    // Initial check
+    setIsFullscreen(!!document.fullscreenElement);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  // Cancel speech synthesis if the user exits fullscreen
+  useEffect(() => {
+    if (!isFullscreen && (interviewState !== "ready" && interviewState !== "complete")) {
+      window.speechSynthesis.cancel();
+      setIsAiSpeaking(false);
+    }
+  }, [isFullscreen, interviewState]);
+
+  const resumeFromFullscreenExit = () => {
+    const element = containerRef.current;
+    if (element && element.requestFullscreen) {
+      element.requestFullscreen()
+        .then(() => {
+          setIsFullscreen(true);
+          // Resume speaking prompt if AI was in speaking state
+          if (interviewState === "intro_speak") {
+            speakText(
+              `Let me repeat the warm-up question. Please introduce yourself, summarize your professional background, and share why you are interested in this role.`,
+              () => {
+                setInterviewState("intro_answering");
+              }
+            );
+          } else if (interviewState === "question_speak") {
+            const qstText = questions[currentQstIndex]?.question || "";
+            speakText(
+              `Let me repeat the question. ${qstText}`,
+              () => {
+                setInterviewState("question_answering");
+              }
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("Error enabling fullscreen:", err);
+          toast.error("Fullscreen mode is mandatory. Please check browser permissions.");
+        });
+    }
+  };
 
   // Face Detection / Expression loop
   useEffect(() => {
@@ -387,6 +451,7 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
   };
 
   // State Transitions
+  // State Transitions
   const startInterview = () => {
     if (!isWebCamOn) {
       toast.error("Webcam is compulsory", {
@@ -394,13 +459,35 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
       });
       return;
     }
-    setInterviewState("intro_speak");
-    speakText(
-      `Hello and welcome to your mock interview for the ${interviewPosition} position. I will be your AI interviewer today. Before we begin the technical questions, let's start with a quick warm-up. Please introduce yourself, summarize your professional background, and share why you are interested in this role.`,
-      () => {
-        setInterviewState("intro_answering");
-      }
-    );
+
+    const element = containerRef.current;
+    if (element && element.requestFullscreen) {
+      element.requestFullscreen()
+        .then(() => {
+          setIsFullscreen(true);
+          setInterviewState("intro_speak");
+          speakText(
+            `Hello and welcome to your mock interview for the ${interviewPosition} position. I will be your AI interviewer today. Before we begin the technical questions, let's start with a quick warm-up. Please introduce yourself, summarize your professional background, and share why you are interested in this role.`,
+            () => {
+              setInterviewState("intro_answering");
+            }
+          );
+        })
+        .catch((err) => {
+          console.error("Error enabling fullscreen:", err);
+          toast.error("Fullscreen is required. Please check browser permissions and allow full screen.");
+        });
+    } else {
+      // Fallback
+      setIsFullscreen(true);
+      setInterviewState("intro_speak");
+      speakText(
+        `Hello and welcome to your mock interview for the ${interviewPosition} position. I will be your AI interviewer today. Before we begin the technical questions, let's start with a quick warm-up. Please introduce yourself, summarize your professional background, and share why you are interested in this role.`,
+        () => {
+          setInterviewState("intro_answering");
+        }
+      );
+    }
   };
 
   const submitIntroduction = () => {
@@ -573,7 +660,27 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-6">
+    <div ref={containerRef} className="w-full flex flex-col gap-6 bg-slate-50/50 p-6 rounded-2xl border border-gray-100 shadow-sm">
+      {/* Fullscreen Required Overlay */}
+      {!isFullscreen && interviewState !== "ready" && interviewState !== "complete" && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex flex-col items-center justify-center text-center p-6 select-none">
+          <div className="bg-white/10 p-6 rounded-full border border-white/20 mb-6 animate-pulse">
+            <Sparkles className="w-16 h-16 text-emerald-400" />
+          </div>
+          <h2 className="text-3xl font-extrabold text-white mb-2">Fullscreen Mode Required</h2>
+          <p className="text-slate-300 max-w-md mb-8 leading-relaxed">
+            To ensure the integrity and fairness of this interview, you must remain in fullscreen mode. 
+            Navigating away or exiting fullscreen is prohibited.
+          </p>
+          <Button
+            onClick={resumeFromFullscreenExit}
+            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-8 py-6 rounded-lg text-lg shadow-lg"
+          >
+            Enter Fullscreen & Resume
+          </Button>
+        </div>
+      )}
+
       {/* Warning Overlays */}
       {noFaceWarning && interviewState !== "ready" && interviewState !== "complete" && (
         <div className="fixed inset-0 z-50 bg-red-600/80 backdrop-blur-sm flex flex-col items-center justify-center text-white p-6">
@@ -820,7 +927,7 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
                     {interviewState === "intro_answering" && (
                       <SpeechRecorder
                         key="intro-recorder"
-                        isRecordingActive={true}
+                        isRecordingActive={isFullscreen}
                         timerLimitSeconds={90}
                         onTranscriptChange={setUserTranscript}
                         onRecordingStateChange={setIsSpeechRecording}
@@ -830,7 +937,7 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
                     {interviewState === "question_answering" && (
                       <SpeechRecorder
                         key={`qst-recorder-${currentQstIndex}`}
-                        isRecordingActive={true}
+                        isRecordingActive={isFullscreen}
                         timerLimitSeconds={120}
                         onTranscriptChange={setUserTranscript}
                         onRecordingStateChange={setIsSpeechRecording}

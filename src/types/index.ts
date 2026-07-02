@@ -18,6 +18,7 @@ export interface Interview {
   techStack: string;
   difficulty?: string;
   numQuestions?: number;
+  resumeText?: string;
   questions: { question: string; answer: string }[];
   behaviorMetrics?: {
     emotions: Record<string, number>;
