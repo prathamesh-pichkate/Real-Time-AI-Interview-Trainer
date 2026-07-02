@@ -11,28 +11,20 @@ import {
   addDoc,
   collection,
   doc,
-  getDocs,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import { Button } from "./ui/button";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import {
   Mic,
-  CircleStop,
   Loader,
   Video,
   VideoOff,
   AlertTriangle,
   Volume2,
-  VolumeX,
-  Play,
   Sparkles,
   Camera,
-  Heart,
   Smile,
   Shield,
   Clock,
@@ -177,7 +169,7 @@ export const DynamicInterview: React.FC<DynamicInterviewProps> = ({
   const navigate = useNavigate();
 
   // Face API custom hook
-  const { isLoaded: isFaceApiLoaded, error: faceApiError } = useFaceApi();
+  const { isLoaded: isFaceApiLoaded } = useFaceApi();
 
   // Webcam & face-tracking states
   const webcamRef = useRef<WebCam>(null);

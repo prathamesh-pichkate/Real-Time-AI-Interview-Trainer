@@ -59,13 +59,30 @@ type FormData = z.infer<typeof formSchema>;
 export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData || {},
+    defaultValues: initialData
+      ? {
+          position: initialData.position,
+          description: initialData.description,
+          experience: initialData.experience,
+          techStack: initialData.techStack,
+          difficulty: (initialData.difficulty as "Easy" | "Moderate" | "Hard") || "Moderate",
+          numQuestions: initialData.numQuestions || 5,
+        }
+      : {
+          position: "",
+          description: "",
+          experience: 0,
+          techStack: "",
+          difficulty: "Moderate",
+          numQuestions: 5,
+        },
   });
 
   const { isValid, isSubmitting } = form.formState;
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { userId } = useAuth();
+  const control = form.control as any;
 
   const title = initialData
     ? initialData.position
@@ -229,7 +246,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
           className="w-full p-8 rounded-lg flex-col flex items-start justify-start gap-6 shadow-md "
         >
           <FormField
-            control={form.control}
+            control={control}
             name="position"
             render={({ field }) => (
               <FormItem className="w-full space-y-4">
@@ -251,7 +268,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
           />
 
           <FormField
-            control={form.control}
+            control={control}
             name="description"
             render={({ field }) => (
               <FormItem className="w-full space-y-4">
@@ -273,7 +290,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
           />
 
           <FormField
-            control={form.control}
+            control={control}
             name="experience"
             render={({ field }) => (
               <FormItem className="w-full space-y-4">
@@ -296,7 +313,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
           />
 
           <FormField
-            control={form.control}
+            control={control}
             name="techStack"
             render={({ field }) => (
               <FormItem className="w-full space-y-4">
@@ -319,7 +336,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
 
           <div className="flex w-full gap-4 flex-col md:flex-row">
             <FormField
-              control={form.control}
+              control={control}
               name="difficulty"
               render={({ field }) => (
                 <FormItem className="w-full space-y-4">
@@ -343,7 +360,7 @@ export const FormMockInterview = ({ initialData }: FormMockInterviewProps) => {
             />
 
             <FormField
-              control={form.control}
+              control={control}
               name="numQuestions"
               render={({ field }) => (
                 <FormItem className="w-full space-y-4">
