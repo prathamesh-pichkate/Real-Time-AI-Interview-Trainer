@@ -11,6 +11,7 @@ import { Interview } from "@/types";
 import { useAuth } from "@clerk/clerk-react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { chatSession } from "@/scripts";
+import { JobScoutPanel } from "@/components/job-scout-panel";
 import {
   Plus,
   BrainCircuit,
@@ -21,7 +22,8 @@ import {
   Loader,
   Sparkles,
   Send,
-  FileText
+  FileText,
+  Flame
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -75,7 +77,7 @@ export const Dashboard = () => {
   useEffect(() => {
     if (
       tabParam &&
-      ["interviews", "assessments", "resume", "negotiation", "roadmap"].includes(tabParam)
+      ["interviews", "jobs", "assessments", "resume", "negotiation", "roadmap"].includes(tabParam)
     ) {
       setActiveTab(tabParam);
     }
@@ -506,6 +508,18 @@ export const Dashboard = () => {
         </button>
 
         <button
+          onClick={() => handleTabChange("jobs")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
+            activeTab === "jobs"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "bg-gray-100/70 text-gray-600 hover:bg-gray-200/80"
+          }`}
+        >
+          <Flame className="w-4 h-4 text-emerald-400 animate-pulse" />
+          Jobs & Freelance Scout
+        </button>
+
+        <button
           onClick={() => handleTabChange("assessments")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
             activeTab === "assessments"
@@ -557,6 +571,11 @@ export const Dashboard = () => {
       {/* active tab panels */}
       <div className="flex flex-col gap-4 py-2 w-full">
         
+        {/* TAB 0: JOBS & FREELANCE SCOUT */}
+        {activeTab === "jobs" && (
+          <JobScoutPanel userResumeText={atsResume} />
+        )}
+
         {/* TAB 1: MOCK INTERVIEWS */}
         {activeTab === "interviews" && (
           <div className="flex flex-col gap-4 w-full">
